@@ -1,5 +1,5 @@
 # STM32 Pulse-Width Distance Sensor Driver
-(insert gif here)
+![Pulse-width distance sensor demo 1](pulse_width_sensor_demo1.gif)
 
 A bare-metal STM32G070 driver for measuring distance from a pulse-width encoded sensor using timer input capture.
 
@@ -80,6 +80,7 @@ distance_mm = ((pulse_width_us - 1000U) * 3U) / 4U;
 A pulse near 2000 microseconds represents no detected target. Since the measured pulse may differ slightly from the nominal value, the driver uses a no-detection threshold rather than requiring exactly 2000 microseconds.
 
 ## Example Output
+![Pulse-width distance sensor demo 2](pulse_width_sensor_demo2.gif)
 ```
 [PULSE_WIDTH_SENSOR] Distance (mm): 90
 [PULSE_WIDTH_SENSOR] Distance (mm): 72
