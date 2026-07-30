@@ -12,7 +12,7 @@
 #endif
 
 #define HEARTBEAT_INTERVAL_MS 250
-#define SENSOR_PRINT_MS 10
+#define SENSOR_PRINT_MS 100
 
 int main(void)
 {
