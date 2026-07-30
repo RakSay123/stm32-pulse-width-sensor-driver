@@ -2,61 +2,43 @@
 #include "stm32g070xx.h"
 #include "device_instances.h"
 #include "system/system.h"
+#include "uart/uart.h"
 #include "systick/systick.h"
 #include "timer/timer.h"
-#include "timer/timer_pwm/timer_pwm.h"
+#include "timer/timer_input_capture/timer_input_capture.h"
 
 #if !defined(__SOFT_FP__) && defined(__ARM_FP)
   #warning "FPU is not initialized, but the project is compiling for an FPU. Please initialize the FPU before use."
 #endif
 
-#define BREATH_INTERVAL_MS 15
-#define HEARTBEAT_INTERVAL_MS 300
-#define SERVO_TICK_MS 2000
-#define HALF_CYCLE_SWEEPS 12
+#define HEARTBEAT_INTERVAL_MS 250
+#define SENSOR_PRINT_MS 10
 
 int main(void)
 {
 	system_init();
 
-	LED_t *pwm_led = get_pwm_led();
 	LED_t *board_led = get_board_led();
-	SERVO_t *mg90s = get_mg90s();
+	PULSE_WIDTH_SENSOR_t *sensor = get_pulse_width_sensor();
 
-	uint32_t last_breath_time = 0;
 	uint32_t last_heartbeat_time = 0;
-	uint32_t last_servo_tick = 0;
+	uint32_t last_print_time = 0;
 
-	int brightness = 0;
-	int led_direction = 1;
+	uint32_t distance_mm = 0;
 
-	int servo_angle = mg90s->min_angle;
-	int servo_direction = (mg90s->max_angle - mg90s->min_angle) / HALF_CYCLE_SWEEPS;
-	servo_set_min_angle(mg90s);
-	systick_delay_s(5);
+	PULSE_WIDTH_SENSOR_Status_t measurement_status = PULSE_WIDTH_SENSOR_NO_NEW_EDGE;
+
+	uart_write_line(USART2, "\r\nSUCCESSFUL BOOT");
+
+	systick_delay_s(2);
 
 	while (1)
 	{
 		uint32_t now = millis();
-		if ((now - last_breath_time) >= BREATH_INTERVAL_MS)
-		{
-			last_breath_time = now;
 
-			led_set_brightness(pwm_led, brightness);
+		PULSE_WIDTH_SENSOR_Status_t update_status = pulse_width_sensor_update(sensor);
+		if (update_status == PULSE_WIDTH_SENSOR_MEASUREMENT_READY) measurement_status = pulse_width_sensor_compute_distance_mm(sensor, &distance_mm);
 
-			brightness += led_direction;
-
-			if (brightness >= 100)
-			{
-				brightness = 100;
-				led_direction = -1;
-			}
-			else if (brightness <= 0)
-			{
-				brightness = 0;
-				led_direction = 1;
-			}
-		}
 
 		if ((now - last_heartbeat_time) >= HEARTBEAT_INTERVAL_MS)
 		{
@@ -64,23 +46,36 @@ int main(void)
 			led_toggle(board_led);
 		}
 
-		if ((now - last_servo_tick) >= SERVO_TICK_MS)
+		if ((now - last_print_time) >= SENSOR_PRINT_MS)
 		{
-			last_servo_tick = now;
+			last_print_time = now;
 
-			servo_set_angle(mg90s, servo_angle);
-
-			servo_angle+=servo_direction;
-
-			if (servo_angle >= mg90s->max_angle)
+			switch (measurement_status)
 			{
-				servo_angle = mg90s->max_angle;
-				servo_direction = -servo_direction;
-			}
-			else if (servo_angle <= mg90s->min_angle)
-			{
-				servo_angle = mg90s->min_angle;
-				servo_direction = -servo_direction;
+				case PULSE_WIDTH_SENSOR_OK:
+					uart_write_str(USART2, "[PULSE_WIDTH_SENSOR] Distance (mm): ");
+					uart_write_int(USART2, distance_mm);
+					uart_write_line(USART2, "");
+					break;
+
+				case PULSE_WIDTH_SENSOR_NO_DETECTION:
+					uart_write_line(USART2, "[PULSE_WIDTH_SENSOR] Nothing detected");
+					break;
+
+				case PULSE_WIDTH_SENSOR_INVALID_PULSE:
+					uart_write_line(USART2, "[PULSE_WIDTH_SENSOR] Invalid pulse");
+					uart_write_str(USART2, "[PULSE_WIDTH_SENSOR] High ticks: ");
+					uart_write_int(USART2, sensor->high_ticks);
+					uart_write_line(USART2, " ticks");
+					break;
+
+				case PULSE_WIDTH_SENSOR_NO_NEW_EDGE:
+					uart_write_line(USART2, "[PULSE_WIDTH_SENSOR] Waiting for measurement");
+					break;
+
+				default:
+					uart_write_line(USART2, "[PULSE_WIDTH_SENSOR] Error");
+					break;
 			}
 		}
 	}
